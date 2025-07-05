@@ -1,0 +1,12 @@
+[package]
+name = "arboreal"
+version = "0.0.1"
+authors = ["BentPen <bentpen97@gmail.com?"]
+edition = "2021"
+description = "Library for building dynamic digraphs with generic data"
+repository = "https://github.com/BentPen/arboreal-rs.git"
+license = "MIT"
+readme = "../README.md"
+keywords = ["graph", "digraph", "dynamic"]
+
+[dependencies]
