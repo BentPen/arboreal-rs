@@ -1,3 +1,3 @@
 
 pub mod graph_components;
-pub mod graph_ref;
+pub(super) mod graph_ref;

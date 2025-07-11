@@ -8,21 +8,21 @@ use super::{DirEdge, GraphChange, Nodal, DiGraph};
 const UNDO_HISTORY_LIMIT: usize = 100;
 
 #[derive(PartialEq)]
-pub struct HistoryDeque<N: Nodal, E: DirEdge> (Deque<GraphChange<N, E>>);
+pub struct HistoryDeque<N, E> (Deque<GraphChange<N, E>>);
 
-impl<N: Nodal, E: DirEdge> HistoryDeque<N, E> {
+impl<N, E> HistoryDeque<N, E> {
     pub fn new(limit: usize) -> Self {
         Self(Deque::new(limit))
     }
 }
 
-impl<N: Nodal, E: DirEdge> Default for HistoryDeque<N, E> {
+impl<N, E> Default for HistoryDeque<N, E> {
     fn default() -> Self {
         Self::new(UNDO_HISTORY_LIMIT)
     }
 }
 
-impl<N: Nodal, E: DirEdge> Debug for HistoryDeque<N, E> {
+impl<N, E> Debug for HistoryDeque<N, E> {
     fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Ok(())
     }
@@ -32,7 +32,7 @@ impl<N: Nodal, E: DirEdge> Debug for HistoryDeque<N, E> {
 /// 
 /// Trait is required for DiGraph, but default implementation does nothing
 /// if mut_history() returns None.
-pub trait ChangeCache<N: Nodal, E: DirEdge> {
+pub(super) trait ChangeCache<N: Nodal, E: DirEdge> {
 
     /// Points to deque of GraphChange variants, for ease of undoing operations
     /// 
@@ -69,4 +69,48 @@ impl<N: Nodal, E: DirEdge> ChangeCache<N, E> for DiGraph<N, E> {
     fn mut_history(&mut self) -> Option<&mut HistoryDeque<N, E>> {
         Some(&mut self.undo_history)
     }
+}
+
+impl<N: Nodal, E: DirEdge> DiGraph<N, E> {
+    pub fn undo(&mut self) -> Result<(), &'static str> {
+        if let Some(change_to_reverse) = self.pop_change() {
+            match change_to_reverse {
+                GraphChange::AddNode(node) => {
+                    self.remove_node_unregistered(node.node_id());
+                },
+                GraphChange::RemoveNode(node, edges) => {
+                    self.insert_node_unregistered(node);
+                    for edge in edges.into_iter() {
+                        self.insert_edge_unregistered(edge);
+                    }
+                },
+                GraphChange::AddEdge(edge) => {
+                    let edge_index = self.edge_index(edge.start_id(), edge.end_id()).unwrap();
+                    self.remove_edge_unregistered(edge_index);
+                },
+                GraphChange::AddEdgeWith(edge, new_start, new_end) => {
+                    if let Some(node_id) = new_start {
+                        self.remove_node_unregistered(node_id);
+                    }
+                    if let Some(node_id) = new_end {
+                        self.remove_node_unregistered(node_id);
+                    }
+                    if let Some(edge_index) = self.edge_index(edge.start_id(), edge.end_id()) {
+                        // This should not trigger if either new_start or new_end is Some(node_id)
+                        self.remove_edge_unregistered(edge_index);
+                    }
+                },
+                GraphChange::RemoveEdge(edge) => {
+                    self.insert_edge_unregistered(edge);
+                },
+                GraphChange::InsertNodeAlongEdge(node, edge) => {
+                    self.remove_node_unregistered(node.node_id());
+                    self.insert_edge_unregistered(edge);
+                },
+                GraphChange::Failure(msg) => return Err(msg), // should be impossible with how mut_history is set up.
+            }
+        }
+        Ok(())
+    }
+
 }

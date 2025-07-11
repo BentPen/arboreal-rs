@@ -25,21 +25,15 @@ pub fn check_add_node<N: Nodal, E: DirEdge>(nodes: &NodeMap<N>, new_node: N) -> 
     GraphChange::AddNode(new_node)
 }
 
-/// OUTDATED DOC; will update later.
-/// 
 /// Determines in- and out-degree of `id` in `edges`.
 /// If no edge is found with a terminal at this `id`, `(0, 0)` is returned.
-/// 
-/// Note that this does not take any reference to a vector of `Node`, 
-/// so the caller must take care to ensure the input `id` is valid
-/// in whatever collection of `Node` is being used.
-pub fn check_node_degrees<N: Nodal, E: DirEdge>(edges: &Vec<E>, node: &N) -> (usize, usize) {
+pub fn check_node_degrees<N: Nodal, E: DirEdge>(edges: &Vec<E>, id: Id) -> (usize, usize) {
     let mut degs = (0, 0);
     for edge in edges.iter() {
-        if edge.start_id() == node.node_id() {
+        if edge.start_id() == id {
             degs.0 += 1;
         }
-        if edge.end_id() == node.node_id() {
+        if edge.end_id() == id {
             degs.1 += 1;
         }
     }
@@ -98,3 +92,15 @@ pub fn check_remove_edge<N: Nodal, E: DirEdge>(edges: &Vec<E>, id_in: Id, id_out
     }
     GraphChange::Failure("Edge not found in graph.")
 }
+
+pub fn collect_reachable_neighbors(census: &mut Vec<Id>, starting_point: Id, after_neighbor_map: &HashMap<Id, Vec<Id>>) {
+        if census.contains(&starting_point) {
+            return
+        }
+        census.push(starting_point);
+        if let Some(cul_da_sac) = after_neighbor_map.get(&starting_point) {
+            for neighbor in cul_da_sac.iter() {
+                collect_reachable_neighbors(census, *neighbor, after_neighbor_map);
+            }
+        }
+    }

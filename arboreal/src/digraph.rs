@@ -1,5 +1,4 @@
 
-
 mod file;
 mod cache;
 mod digraph_impl;
@@ -13,35 +12,54 @@ use crate::graph_base::{graph_components::*, graph_ref};
 use cache::{ChangeCache, HistoryDeque};
 
 #[derive(PartialEq, Serialize, Deserialize)]
-pub struct DiGraph<N: Nodal, E: DirEdge> {
+pub struct DiGraph<N, E> {
     pub name: Option<String>,
     
-    #[serde(bound(deserialize = "N: Nodal"))]
     nodes: HashMap<Id, N>,
-
-    #[serde(bound(deserialize = "E: DirEdge"))]
     edges: Vec<E>,
 
     #[serde(skip)]
     neighbors_before: HashMap<Id, Vec<Id>>,
     #[serde(skip)]
     neighbors_after: HashMap<Id, Vec<Id>>,
-    
-    // Cached data
     #[serde(skip)]
     undo_history: HistoryDeque<N, E>,
 }
 
 impl<N: Nodal, E: DirEdge> DiGraph<N, E> {
 
+    /// `new()` just calls `default()` and may be replaced in the future
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     /// Creates a new `DirEdge` with bare edges and nodes, using provided Vec of (start, end) id pairs
     pub fn from_terminal_pairs(terminal_pairs: Vec<(Id, Id)>) -> Self {
-        let mut instance = Self::default();
+        let mut instance = Self::new();
         for (start, end) in terminal_pairs {
             instance.insert_edge_with_nodes(start, end).unwrap();
         }
         instance.clear_history();
         instance
+    }
+
+    pub fn all_node_ids(&self) -> Vec<Id> {
+        let mut node_ids: Vec<Id> = self.nodes
+            .keys()
+            .cloned()
+            .collect();
+        node_ids.sort();
+        node_ids
+    }
+
+    pub fn all_edge_pairs(&self) -> Vec<(Id, Id)> {
+        let mut edge_pairs = Vec::with_capacity(self.edges.len());
+        for edge in self.edges.iter() {
+            edge_pairs.push((edge.start_id(), edge.end_id()));
+        }
+        // edge_pairs.sort_by(|a,b| a.0 <= b.0 && a.1 <= b.1);
+        edge_pairs.sort();
+        edge_pairs
     }
 
     pub fn get_node(&self, node_id: Id) -> Option<&N> {
@@ -188,6 +206,14 @@ impl<N: Nodal, E: DirEdge> DiGraph<N, E> {
             0 => Err("No sources in graph."),
             _ => Err("Multiple sources in graph.")
         }
+    }
+
+    pub fn nodes_unreachable_from(&self, starting_point: Id) -> Vec<Id> {
+        let mut lost_nodes: Vec<Id> = self.all_node_ids();
+        let mut census = Vec::with_capacity(self.nodes.len());
+        graph_ref::collect_reachable_neighbors(&mut census, starting_point, &self.neighbors_after);
+        lost_nodes.retain(|&id| !census.contains(&id));
+        lost_nodes
     }
 
 }

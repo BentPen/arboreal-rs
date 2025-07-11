@@ -26,7 +26,7 @@ pub trait DirEdge: Clone + PartialEq + Serialize + DeserializeOwned + Default {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub enum GraphChange<N: Nodal, E: DirEdge> {
+pub enum GraphChange<N, E> {
     AddNode(N),
     RemoveNode(N, Vec<E>),
     AddEdge(E),
@@ -36,7 +36,7 @@ pub enum GraphChange<N: Nodal, E: DirEdge> {
     Failure(&'static str)
 }
 impl<N: Nodal, E: DirEdge> GraphChange<N, E> {
-    pub fn try_get_edge(&self) -> Result<E, &'static str> {
+    pub(crate) fn try_get_edge(&self) -> Result<E, &'static str> {
         match self {
             Self::AddEdge(e) => Ok(e.clone()),
             Self::AddEdgeWith(e, _, _) => Ok(e.clone()),
@@ -47,7 +47,7 @@ impl<N: Nodal, E: DirEdge> GraphChange<N, E> {
             _ => Err("Not an edge variant.")
         }
     }
-    pub fn try_get_node(&self) -> Result<N, &'static str> {
+    pub(crate) fn try_get_node(&self) -> Result<N, &'static str> {
         match self {
             Self::AddNode(n) => Ok(n.clone()),
             Self::RemoveNode(n, _) => Ok(n.clone()),
@@ -56,14 +56,14 @@ impl<N: Nodal, E: DirEdge> GraphChange<N, E> {
             _ => Err("Not a node variant.")
         }
     }
-    pub fn try_get_edge_vec(&self) -> Result<Vec<E>, &'static str> {
+    pub(crate) fn try_get_edge_vec(&self) -> Result<Vec<E>, &'static str> {
         match self {
             Self::RemoveNode(_, ev) => Ok(ev.clone()),
             Self::Failure(reason) => Err(reason),
             _ => Err("This method only works with the RemoveNode variant.")
         }
     }
-    pub fn try_get_edge_with_nodes(&self) -> Result<(E, Option<Id>, Option<Id>), &'static str> {
+    pub(crate) fn try_get_edge_with_nodes(&self) -> Result<(E, Option<Id>, Option<Id>), &'static str> {
         match self {
             Self::AddEdgeWith(e, n_in, n_out) => Ok((e.clone(), n_in.clone(), n_out.clone())),
             Self::Failure(reason) => Err(reason),
@@ -71,4 +71,3 @@ impl<N: Nodal, E: DirEdge> GraphChange<N, E> {
         }
     }
 }
-

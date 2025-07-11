@@ -48,19 +48,28 @@ mod tests {
 
     #[test]
     fn test_auto_edge_drop() {
+        let obj: DiGraph<NodeExample, EdgeExample> = DiGraph::new();
+        println!("Default object for example Node/Edge structs:\n{}", obj);
         let file_name = "example.ron";
-        let mut example_obj: DiGraph<NodeExample, EdgeExample> = DiGraph::from_terminal_pairs(vec![(1,2), (2,3), (4,3), (5,3), (5,6), (6,7)]);
+        let mut example_obj: DiGraph<NodeExample, EdgeExample> = DiGraph::from_terminal_pairs(vec![(1,2), (1,3), (4,3), (3, 5), (5,6), (6,7), (3,7), (8,4), (2,8)]);
         // example_obj.insert_node(NodeExample::bare(7)).unwrap();
         // example_obj.insert_edge_with_nodes(3, 4).unwrap();
         // example_obj.insert_edge_with_nodes(4, 7).unwrap();
         // let start = example_obj.get_node(3).unwrap();
         // assert_eq!(example_obj.get_source(), Ok(start));
         println!("\n{}", example_obj);
+        println!("Unreachable from id 1: {:?}", example_obj.nodes_unreachable_from(1));
+        println!("Unreachable from id 2: {:?}", example_obj.nodes_unreachable_from(2));
+        println!("Unreachable from id 3: {:?}", example_obj.nodes_unreachable_from(3));
+        println!("Unreachable from id 42: {:?}\n(Note that the id is not required to be valid)", example_obj.nodes_unreachable_from(42));
         example_obj.save_to_file(file_name).unwrap();
         example_obj.remove_node(3).unwrap();
         // let new_start = example_obj.get_node(4).unwrap();
         // assert_eq!(example_obj.get_source(), Ok(new_start));
         println!("\nAfter dropping id 3:\n{}", example_obj);
+        println!("\nUnreachable from id 1: {:?}", example_obj.nodes_unreachable_from(1));
+        example_obj.undo().unwrap();
+        println!("\nAfter undoing the drop:\n{}", example_obj);
         let new_obj: DiGraph<NodeExample, EdgeExample> = DiGraph::load_from_file(file_name).unwrap();
         println!("\nOriginal object, saved before dropping id 3:\n{}", new_obj);
         std::fs::remove_file(file_name).unwrap_or(());

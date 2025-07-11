@@ -38,11 +38,7 @@ pub trait FileIO: Default + Serialize + for<'a> Deserialize<'a>
     }
 }
 
-impl<N, E> FileIO for DiGraph<N, E>
-where
-    N: Nodal,
-    E: DirEdge
-{
+impl<N: Nodal, E: DirEdge> FileIO for DiGraph<N, E> {
     // Default implementations for
     //  - config()
     //  - load_or_default()

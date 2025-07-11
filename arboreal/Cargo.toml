@@ -1,6 +1,6 @@
 [package]
 name = "arboreal"
-version = "0.0.3"
+version = "0.0.4"
 authors = ["BentPen <bentpen97@gmail.com?"]
 edition = "2024"
 rust-version = "1.88"

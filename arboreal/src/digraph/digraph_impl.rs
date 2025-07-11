@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::fmt::{self, Display};
 
 use crate::graph_base::graph_components::Id;
+use crate::graph_base::graph_ref;
 use super::{Nodal, DirEdge, DiGraph, HistoryDeque};
 
 const DEFAULT_NODE_PREALLOCATION: usize = 20;
@@ -70,10 +71,7 @@ impl<N: Nodal, E: DirEdge> DiGraph<N, E> {
 
     /// Returns vec of `node_id` for which `in_degree(node_id) == Some(0)`
     pub(super) fn source_node_ids(&self) -> Vec<Id> {
-        let mut ids: Vec<Id> = self.nodes
-            .keys()
-            .cloned()
-            .collect();
+        let mut ids: Vec<Id> = self.all_node_ids();
         ids.retain(|&id| self.in_degree(id) == Some(0));
         ids.shrink_to_fit();
         ids
@@ -81,25 +79,27 @@ impl<N: Nodal, E: DirEdge> DiGraph<N, E> {
 
     /// Returns vec of `node_id` for which `out_degree(node_id) == Some(0)`
     pub(super) fn sink_node_ids(&self) -> Vec<Id> {
-        let mut ids: Vec<Id> = self.nodes
-            .keys()
-            .cloned()
-            .collect();
+        let mut ids: Vec<Id> = self.all_node_ids();
         ids.retain(|&id| self.out_degree(id) == Some(0));
         ids.shrink_to_fit();
         ids
     }
 
-    pub(super) fn path_from_source(&self, id: Id) -> Result<Vec<Id>, &'static str> {
-        let source = self.get_source()?;
-        todo!()
-    }
-    pub(super) fn path_to_sink(&self, id: Id) -> Result<Vec<Id>, &'static str> {
-        todo!()
-    }
+    // pub(super) fn path_from_source(&self, id: Id) -> Result<Vec<Id>, &'static str> {
+    //     let source = self.get_source()?;
+    //     todo!()
+    // }
+    // pub(super) fn path_to_sink(&self, id: Id) -> Result<Vec<Id>, &'static str> {
+    //     todo!()
+    // }
 
     pub(super) fn is_connected(&self) -> bool {
-        todo!()
+        let mut source_ids = self.source_node_ids();
+        if source_ids.len() != 1 {
+            return false;
+        }
+        let starting_point = source_ids.pop().unwrap();
+        self.nodes_unreachable_from(starting_point).is_empty()
     }
     pub(super) fn is_terminable(&self) -> bool {
         todo!()
@@ -131,16 +131,17 @@ impl<N: Nodal, E: DirEdge> Display for DiGraph<N, E> {
         };
         let edges_per_line: u8 = 4;
         write!(f, "{name}\n")?;
-        write!(f, "\tNode Ids: {:?}\n", self.nodes.keys())?;
+        write!(f, "\tNode Ids: {:?}\n", self.all_node_ids())?;
         if self.edges.len() > 0 {
+            let edge_vec = self.all_edge_pairs();
             let mut reset_count = 0;
-            for edge in self.edges.iter() {
+            for edge_pair in edge_vec.into_iter() {
                 if reset_count == 0 {
                     write!(f, "\t")?;
                 } else {
                     write!(f, ",  ")?;
                 }
-                write!(f, "{}->{}", edge.start_id(), edge.end_id())?;
+                write!(f, "{}->{}", edge_pair.0, edge_pair.1)?;
                 reset_count += 1;
                 if reset_count == edges_per_line {
                     reset_count = 0;
