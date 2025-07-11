@@ -1,40 +1,92 @@
 
+
+mod file;
+mod cache;
+mod digraph_impl;
+
+pub use file::FileIO;
+
 use std::collections::HashMap;
-use std::hash::Hash;
+use serde::{Deserialize, Serialize};
 
-use crate::graph_components::{Node, Edge, GraphChange};
-use crate::graph_ref;
-use crate::cache::ChangeCache;
+use crate::graph_base::{graph_components::*, graph_ref};
+use cache::{ChangeCache, HistoryDeque};
 
-// Type aliases for frequently used collections
-type NV<I, TN> = Vec<Node<I, TN>>;
-type EV<I, TE> = Vec<Edge<I, TE>>;
-type DM<I> = HashMap<I, (usize, usize)>;
+#[derive(PartialEq, Serialize, Deserialize)]
+pub struct DiGraph<N: Nodal, E: DirEdge> {
+    pub name: Option<String>,
+    
+    #[serde(bound(deserialize = "N: Nodal"))]
+    nodes: HashMap<Id, N>,
 
-pub trait DiGraph<I, TN, TE>: ChangeCache<I, TN, TE> + Default
-where
-    I: Copy + PartialEq + Default + Eq + Hash,
-    TN: Clone,
-    TE: Clone
-{
+    #[serde(bound(deserialize = "E: DirEdge"))]
+    edges: Vec<E>,
 
-    fn ref_nodes(&self) -> &NV<I, TN>;
-    fn ref_edges(&self) -> &EV<I, TE>;
-    fn ref_degree_map(&self) -> &DM<I>;
-    fn mut_nodes(&mut self) -> &mut NV<I, TN>;
-    fn mut_edges(&mut self) -> &mut EV<I, TE>;
-    fn mut_degree_map(&mut self) -> &mut DM<I>;
+    #[serde(skip)]
+    neighbors_before: HashMap<Id, Vec<Id>>,
+    #[serde(skip)]
+    neighbors_after: HashMap<Id, Vec<Id>>,
+    
+    // Cached data
+    #[serde(skip)]
+    undo_history: HistoryDeque<N, E>,
+}
+
+impl<N: Nodal, E: DirEdge> DiGraph<N, E> {
+
+    /// Creates a new `DirEdge` with bare edges and nodes, using provided Vec of (start, end) id pairs
+    pub fn from_terminal_pairs(terminal_pairs: Vec<(Id, Id)>) -> Self {
+        let mut instance = Self::default();
+        for (start, end) in terminal_pairs {
+            instance.insert_edge_with_nodes(start, end).unwrap();
+        }
+        instance.clear_history();
+        instance
+    }
+
+    pub fn get_node(&self, node_id: Id) -> Option<&N> {
+        self.nodes.get(&node_id)
+    }
+    pub fn get_node_mut(&mut self, node_id: Id) -> Option<&mut N> {
+        self.nodes.get_mut(&node_id)
+    }
+
+    pub fn get_edge(&self, start_id: Id, end_id: Id) -> Option<&E> {
+        if let Some(index) = self.edge_index(start_id, end_id) {
+            return self.edges.get(index);
+        }
+        None
+    }
+    pub fn get_edge_mut(&mut self, start_id: Id, end_id: Id) -> Option<&mut E> {
+        if let Some(index) = self.edge_index(start_id, end_id) {
+            return self.edges.get_mut(index);
+        }
+        None
+    }
 
     /// Inserts `node` into graph, with no edges.
     /// 
     /// If the node's id is already in use, an error is returned.
-    fn insert_node(&mut self, node: Node<I, TN>) -> Result<(), &'static str> {
-        let new_node = graph_ref::check_add_node::<I, TN, TE>(self.ref_nodes(), node).try_get_node()?;
-        let node_id = new_node.0;
-        self.register_change(GraphChange::AddNode(new_node.clone()));
-        self.mut_nodes().push(new_node);
-        self.mut_degree_map().insert(node_id, (0, 0));
+    pub fn insert_node(&mut self, node: N) -> Result<(), &'static str> {
+        let change = 
+            graph_ref::check_add_node::<N, E>(&self.nodes, node);
+        let new_node = change.try_get_node()?;
+        self.insert_node_unregistered(new_node);
+        self.register_change(change);
         Ok(())
+    }
+
+    /// Removes and returns node (as Ok(N)) with input id, breaking any edges incident on it.
+    /// 
+    /// If no node with that id is present in the graph, an error is returned.
+    pub fn remove_node(&mut self, node_id: Id) -> Result<N, &'static str> {
+        let change =
+            graph_ref::check_remove_node::<N, E>(&self.nodes, &self.edges, node_id);
+        let out_node_id = change.try_get_node()?.node_id();
+        // let out_edges = change.try_get_edge_vec()?;
+        let removed_node = self.remove_node_unregistered(out_node_id);
+        self.register_change(change);
+        Ok(removed_node)
     }
 
     /// Inserts `edge` into graph.
@@ -42,207 +94,100 @@ where
     /// If the edge's terminal nodes are not present in the graph,
     /// or an edge with these same terminals is already present in the graph,
     /// an error is returned.
-    fn insert_edge(&mut self, edge: Edge<I, TE>) -> Result<(), &'static str> {
-        let new_edge = graph_ref::check_add_edge::<I, TN, TE>
-            (self.ref_nodes(), self.ref_edges(), edge)
-            .try_get_edge()?;
-        let (id_before, id_after) = (new_edge.0, new_edge.1);
-        self.register_change(GraphChange::AddEdge(new_edge.clone()));
-        self.mut_edges().push(new_edge);
-        let deg_map = self.mut_degree_map();
-        // Increase start node's out-degree by 1
-        deg_map.get_mut(&id_before)
-            .unwrap()
-            .1 += 1;
-        // Increase end node's in-degree by 1
-        deg_map.get_mut(&id_after)
-            .unwrap()
-            .0 += 1;
+    pub fn insert_edge(&mut self, edge: E) -> Result<(), &'static str> {
+        let change =
+            graph_ref::check_add_edge::<N, E>(&self.nodes, &self.edges, edge);
+        let new_edge = change.try_get_edge()?;
+        self.insert_edge_unregistered(new_edge);
+        self.register_change(change);
         Ok(())
     }
 
-    /// Inserts a bare `Node` with id `new_id` along edge from `id_before` to `id_after`,\
+    /// Doc TODO
+    pub fn remove_edge(&mut self, start_id: Id, end_id: Id) -> Result<(), &'static str> {
+        let change = 
+            graph_ref::check_remove_edge::<N, E>(&self.edges, start_id, end_id);
+        let _out_edge = change.try_get_edge()?;
+        let edge_index = self.edge_index(start_id, end_id).unwrap();
+        self.remove_edge_unregistered(edge_index);
+        self.register_change(change);
+        Ok(())
+    }
+
+    /// Inserts a bare node with id `new_id` along edge from `id_before` to `id_after`,\
     /// deleting the original edge and creating two new edges.
     /// 
     /// That edge's data is moved to the new edge from `id_before` to `new_id`.
     /// 
     /// If the old edge does not exist, or `new_id` is already in use, an error is returned.
-    fn insert_node_along(&mut self, new_id: I, id_before: I, id_after: I) -> Result<(), &'static str> {
-        let new_node = graph_ref::check_add_node::<I, TN, TE>
-            (self.ref_nodes(), Node::bare(new_id))
+    pub fn insert_node_along(&mut self, new_id: Id, id_before: Id, id_after: Id) -> Result<(), &'static str> {
+        let new_node =
+            graph_ref::check_add_node::<N, E>(&self.nodes, N::bare(new_id))
             .try_get_node()?;
-        let old_edge = graph_ref::check_remove_edge::<I, TN, TE>
-            (self.ref_edges(), id_before, id_after)
+        let old_edge =
+            graph_ref::check_remove_edge::<N, E>(&self.edges, id_before, id_after)
             .try_get_edge()?;
-        let edge_index = graph_ref::edge_index::<I, TE>
-            (self.ref_edges(), id_before, id_after)
-            .unwrap();
-        let edge_before = Edge::new(id_before, new_id, old_edge.2.clone());
-        let edge_after = Edge::bare(new_id, id_after);
-        self.register_change(GraphChange::InsertNodeAlongEdge(new_id, old_edge));
-        self.mut_nodes()
-            .push(new_node);
-        let edges = self.mut_edges();
-        edges.remove(edge_index);
-        edges.push(edge_before);
-        edges.push(edge_after);
-
-        self.mut_degree_map().insert(new_id, (1,1));
-        // degrees of id_before and id_after will be unchanged
-
+        let edge_index = self.edge_index(id_before, id_after).unwrap();
+        let mut edge_before = old_edge.clone();
+        edge_before.change_end(new_id);
+        let edge_after = E::bare(new_id, id_after);
+        self.insert_node_unregistered(new_node.clone());
+        self.remove_edge_unregistered(edge_index);
+        self.insert_edge_unregistered(edge_before);
+        self.insert_edge_unregistered(edge_after);
+        self.register_change(GraphChange::InsertNodeAlongEdge(new_node, old_edge));
         Ok(())
     }
 
     /// Inserts a bare `Edge` with provided terminals, creating bare nodes at those terminals if needed.
     /// 
     /// If an edge with these terminals already exists, an error is returned.
-    fn insert_edge_with_nodes(&mut self, id_in: I, id_out: I) -> Result<(), &'static str> {
+    pub fn insert_edge_with_nodes(&mut self, id_in: Id, id_out: Id) -> Result<(), &'static str> {
         let change =
-            graph_ref::check_add_edge_with_nodes::<I, TN, TE>(self.ref_nodes(), self.ref_edges(), id_in, id_out);
+            graph_ref::check_add_edge_with_nodes::<N, E>(&self.nodes, &self.edges, id_in, id_out);
         let (new_edge, new_in, new_out) = change.try_get_edge_with_nodes()?;
         if let Some(new_id) = new_in {
-            self.insert_node(Node::bare(new_id)).unwrap();
+            self.insert_node_unregistered(N::bare(new_id));
         }
         if let Some(new_id) = new_out {
-            self.insert_node(Node::bare(new_id)).unwrap();
+            self.insert_node_unregistered(N::bare(new_id));
         }
-        self.insert_edge(new_edge).unwrap();
+        self.insert_edge_unregistered(new_edge);
         self.register_change(change);
         Ok(())
     }
 
-    /// Returns Some((in_degree, out_degree)) from internally maintained degree map, or None if node index not found
-    fn in_out_degree(&self, id: I) -> Option<(usize, usize)> {
-        if let Some(degs) = self.ref_degree_map().get(&id) {
-            return Some(*degs);
-        }
-        None
-    }
-    /// Convenience method to return only part of `self.in_out_degree(id)`
-    fn in_degree(&self, id: I) -> Option<usize> {
-        if let Some((deg_in, _deg_out)) = self.in_out_degree(id) {
-            return Some(deg_in);
-        }
-        None
-    }
-    /// Convenience method to return only part of `self.in_out_degree(id)`
-    fn out_degree(&self, id: I) -> Option<usize> {
-        if let Some((_deg_in, deg_out)) = self.in_out_degree(id) {
-            return Some(deg_out);
-        }
-        None
-    }
-    
-    /// Returns Id vec of nodes with in_degree 0
+    /// Returns `Some(n)`, where `n` is the number of edges for which provided `node_id` is the end terminal
     /// 
-    /// In the future, this method may be revoked in favor of a combined sink/source\
-    /// method that returns (Vec<I>, Vec<I>)
-    fn source_node_ids(&self) -> Vec<I> {
-        let mut ids = Vec::with_capacity(self.ref_nodes().len());
-        for (id, (in_deg, _out_deg)) in self.ref_degree_map().iter() {
-            if *in_deg == 0 {
-                ids.push(*id);
-            }
+    /// Or `None` if the provided id is not found among the nodes
+    pub fn in_degree(&self, node_id: Id) -> Option<usize> {
+        if let Some(ids_before) = self.neighbors_before.get(&node_id) {
+            return Some(ids_before.len());
         }
-        ids.shrink_to_fit();
-        ids
+        None
     }
 
-    fn get_source(&self) -> Result<I, &'static str> {
-        let mut sources = self.source_node_ids();
-        match sources.len() {
-            1 => Ok(sources.pop().unwrap()),
+    /// Returns `Some(n)`, where `n` is the number of edges for which provided `node_id` is the start terminal
+    /// 
+    /// Or `None` if the provided id is not found among the nodes
+    pub fn out_degree(&self, node_id: Id) -> Option<usize> {
+        if let Some(ids_after) = self.neighbors_after.get(&node_id) {
+            return Some(ids_after.len());
+        }
+        None
+    }
+
+    pub fn get_source(&self) -> Result<&N, &'static str> {
+        let mut source_ids = self.source_node_ids();
+        match source_ids.len() {
+            1 => {
+                let index = source_ids.pop().unwrap();
+                let source_node = self.nodes.get(&index).unwrap();
+                Ok(source_node)
+            }
             0 => Err("No sources in graph."),
             _ => Err("Multiple sources in graph.")
         }
-    }
-
-    /// Returns Id vec of nodes with out_degree 0
-    /// 
-    /// In the future, this method may be revoked in favor of a combined sink/source\
-    /// method that returns (Vec<I>, Vec<I>)
-    fn sink_node_ids(&self) -> Vec<I> {
-        let mut ids = Vec::with_capacity(self.ref_nodes().len());
-        for (id, (_in_deg, out_deg)) in self.ref_degree_map().iter() {
-            if *out_deg == 0 {
-                ids.push(*id);
-            }
-        }
-        ids.shrink_to_fit();
-        ids
-    }
-
-    fn remove_node(&mut self, id: I) -> Result<(), &'static str> {
-        let change =
-            graph_ref::check_remove_node::<I, TN, TE>(self.ref_nodes(), self.ref_edges(), id);
-        let out_node_id = change.try_get_node()?
-            .0;
-        let out_edges = change.try_get_edge_vec()?;
-        let index =
-            graph_ref::node_index::<I, TN>(self.ref_nodes(), id)
-            .unwrap();
-        self.register_change(change);
-        for edge in out_edges {
-            let _partial_change = self.remove_edge_unregistered(edge.0, edge.1)?;
-        }
-        self.mut_degree_map()
-            .remove(&out_node_id);
-        self.mut_nodes()
-            .remove(index);
-        Ok(())
-    }
-
-    fn remove_edge(&mut self, id_in: I, id_out: I) -> Result<(), &'static str> {
-        let change = self.remove_edge_unregistered(id_in, id_out)?;
-        self.register_change(change);
-        Ok(())
-    }
-
-    fn remove_edge_unregistered(&mut self, id_in: I, id_out: I) -> Result<GraphChange<I, TN, TE>, &'static str> {
-        let change = 
-            graph_ref::check_remove_edge::<I, TN, TE>(self.ref_edges(), id_in, id_out);
-        let out_edge = change.try_get_edge()?;
-        let index =
-            graph_ref::edge_index::<I, TE>(self.ref_edges(), id_in, id_out)
-            .unwrap();
-        self.mut_degree_map()
-            .get_mut(&out_edge.0)
-            .unwrap()
-            .1 -= 1;
-        self.mut_degree_map()
-            .get_mut(&out_edge.1)
-            .unwrap()
-            .0 -= 1;
-        self.mut_edges()
-            .remove(index);
-        Ok(change)
-    }
-
-    fn path_from_source(&self, id: I) -> Result<Vec<I>, &'static str> {
-        let source = self.get_source()?;
-        todo!()
-    }
-    fn path_to_sink(&self, id: I) -> Result<Vec<I>, &'static str> {
-        todo!()
-    }
-
-    fn is_connected(&self) -> bool {
-        todo!()
-    }
-    fn is_terminable(&self) -> bool {
-        todo!()
-    }
-    fn is_valid(&self) -> bool {
-        self.is_connected() && self.is_terminable()
-    }
-
-    fn from_edges(edges: Vec<(I, I)>) -> Self {
-        let mut instance = Self::default();
-        for edge in edges {
-            instance.insert_edge_with_nodes(edge.0, edge.1).unwrap();
-        }
-        instance.clear_history();
-        instance
     }
 
 }

@@ -4,7 +4,9 @@ use std::io::Read;
 use std::path::Path;
 
 use serde::{Serialize, Deserialize};
-use ron::{ser::PrettyConfig, de::from_bytes as ron_reader, Options as ron_writer, Result};
+use ron::{ser::PrettyConfig, de::from_bytes as ron_reader, Options as ron_writer, Result as RonResult};
+
+use super::{Nodal, DirEdge, DiGraph};
 
 pub trait FileIO: Default + Serialize + for<'a> Deserialize<'a>
 {
@@ -28,12 +30,22 @@ pub trait FileIO: Default + Serialize + for<'a> Deserialize<'a>
         // No file, or failure to load
         None
     }
-    fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+    fn save_to_file<P: AsRef<Path>>(&self, path: P) -> RonResult<()> {
         let f = File::create(path)?;
-        // let buf = serde_json::to_vec(self)?;
         ron_writer::default()
             .to_io_writer_pretty(f, self, Self::config())?;
-        // f.write_all(&buf[..])?;
         Ok(())
     }
+}
+
+impl<N, E> FileIO for DiGraph<N, E>
+where
+    N: Nodal,
+    E: DirEdge
+{
+    // Default implementations for
+    //  - config()
+    //  - load_or_default()
+    //  - load_from_file()
+    //  - save_to_file()
 }
