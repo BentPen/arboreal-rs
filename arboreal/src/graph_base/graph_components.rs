@@ -10,6 +10,7 @@ use serde::{de::DeserializeOwned, Serialize};
 /// 
 /// In the future this may be redesigned to be a generic.
 pub type Id = u16;
+
 pub(crate) const ID_MAX: Id = std::u16::MAX;
 
 /// Trait required for any type used as nodes in a [`DiGraph`](crate::DiGraph) instance.
@@ -19,8 +20,14 @@ pub(crate) const ID_MAX: Id = std::u16::MAX;
 /// - `self.node_id() -> u16` should return a copy of the `id` associated with the instance.
 /// 
 /// It is incumbent on the library user to ensure the identifier is consistent between these methods.
-pub trait Nodal: Clone + PartialEq + Serialize + DeserializeOwned + Default {
+/// 
+/// Types implementing this trait should not hold any references to [`DirEdge`](crate::DirEdge); that maintenance is left entirely to [`DiGraph`](crate::DiGraph).
+pub trait Nodal: Clone + PartialEq {
+
+    /// Returns a new instance of the type, without any data besides the identifier
     fn bare(id: Id) -> Self;
+
+    /// Returns a copy of the node's identifier
     fn node_id(&self) -> Id;
 }
 
@@ -39,20 +46,27 @@ pub trait Nodal: Clone + PartialEq + Serialize + DeserializeOwned + Default {
 /// implementing [`Nodal`](crate::Nodal)).\
 /// The requirement that those identifiers be shared with active nodes is only enforced when the program attempts to add the `DirEdge`
 /// type to a [`DiGraph`](crate::DiGraph) instance. If an edge is present in a `DiGraph`, then two nodes (one for each terminal identifier of the `DirEdge`) must also be present.
-/// The contrapositive is likewise enforced: whenever a node is removed from a `DiGraph`, then any edges incident on that node are then removed as well.
-pub trait DirEdge: Clone + PartialEq + Serialize + DeserializeOwned + Default {
+/// The contrapositive is likewise enforced: whenever a node is removed from a `DiGraph`, any edges incident on that node are then removed as well.
+pub trait DirEdge: Clone + PartialEq {
 
-    /// Creates a new instance of the type, without any data besides
+    /// Returns a new instance of the type, without any data besides the terminal identifiers
     fn bare(start: Id, end: Id) -> Self;
+
+    /// Returns a copy of the edge's terminal identifiers, in the order `(start, end)`
     fn terminal_ids(&self) -> (Id, Id);
 
-    // These functions should check that the id is present in the collection of nodes
+    /// Replaces the starting terminal identifier with `new_start`
     fn change_start(&mut self, new_start: Id);
+
+    /// Replaces the ending terminal identifier with `new_end`
     fn change_end(&mut self, new_end: Id);
 
+    /// Convenience method to return starting terminal identifier
     fn start_id(&self) -> Id {
         self.terminal_ids().0
     }
+
+    /// Convenience method to return ending terminal identifier
     fn end_id(&self) -> Id {
         self.terminal_ids().1
     }

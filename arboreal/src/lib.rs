@@ -6,42 +6,32 @@ pub use graph_base::graph_components::{Nodal, DirEdge, Id};
 
 #[cfg(test)]
 mod tests {
-    use serde::{Deserialize, Serialize};
 
     use super::*;
 
-    #[derive(PartialEq, Clone, Debug, Default, Serialize, Deserialize)]
-    struct NodeExample {
-        pub some_id: Id,
-        pub other_node_stuff: u8
-    }
+    #[derive(PartialEq, Clone, Debug)]
+    struct NodeExample(Id);
     impl Nodal for NodeExample {
         fn bare(id: Id) -> Self {
-            Self { some_id: id, other_node_stuff: 255 }
+            Self(id)
         }
         fn node_id(&self) -> Id {
-            self.some_id
+            self.0
         }
     }
 
-    #[derive(PartialEq, Clone, Debug, Default, Serialize, Deserialize)]
-    struct EdgeExample {
-        vertices: (Id, Id),
-        other_edge_stuff: Option<String>
-    }
+    #[derive(PartialEq, Clone, Debug)]
+    struct EdgeExample { vertices: (Id, Id) }
     impl DirEdge for EdgeExample {
         fn bare(start: Id, end: Id) -> Self {
-            Self { vertices: (start, end), other_edge_stuff: None }
+            Self { vertices: (start, end) }
         }
-    
         fn terminal_ids(&self) -> (Id, Id) {
             self.vertices
         }
-    
         fn change_start(&mut self, new_start: Id) {
             self.vertices.0 = new_start;
         }
-    
         fn change_end(&mut self, new_end: Id) {
             self.vertices.1 = new_end;
         }
@@ -63,7 +53,7 @@ mod tests {
         println!("Unreachable from id 2: {:?}", example_obj.nodes_unreachable_from(2));
         println!("Unreachable from id 3: {:?}", example_obj.nodes_unreachable_from(3));
         println!("Unreachable from id 42: {:?}\n(Note that the id is not required to be valid)", example_obj.nodes_unreachable_from(42));
-        example_obj.save_to_file(file_name).unwrap();
+        // example_obj.save_to_file(file_name).unwrap();
         example_obj.remove_node(3).unwrap();
         // let new_start = example_obj.get_node(4).unwrap();
         // assert_eq!(example_obj.get_source(), Ok(new_start));
@@ -71,8 +61,8 @@ mod tests {
         println!("\nUnreachable from id 1: {:?}", example_obj.nodes_unreachable_from(1));
         example_obj.undo().unwrap();
         println!("\nAfter undoing the drop:\n{}", example_obj);
-        let new_obj: DiGraph<NodeExample, EdgeExample> = DiGraph::load_from_file(file_name).unwrap();
-        println!("\nOriginal object, saved before dropping id 3:\n{}", new_obj);
+        // let new_obj: DiGraph<Id, EdgeExample> = DiGraph::load_from_file(file_name).unwrap();
+        // println!("\nOriginal object, saved before dropping id 3:\n{}", new_obj);
         std::fs::remove_file(file_name).unwrap_or(());
         // let file_string_string = "example_string_string.ron";
         // let obj_string_string: StateGraph<String, String> = StateGraph::load_or_default(file_string_string);

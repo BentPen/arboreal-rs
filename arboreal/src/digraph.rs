@@ -11,6 +11,58 @@ use serde::{Deserialize, Serialize};
 use crate::graph_base::{graph_components::*, graph_ref};
 use cache::{ChangeCache, HistoryDeque};
 
+/// Directed Graph for nodes of type `N` (see [`Nodal`](crate::Nodal)) and directed edges of type `E` (see [`DirEdge`](crate::DirEdge)).
+/// 
+/// # Examples
+///
+/// ```
+/// use arboreal::*;
+/// 
+/// #[derive(PartialEq, Clone, Debug)]
+/// struct NodeExample(Id);
+/// impl Nodal for NodeExample {
+///     fn bare(id: Id) -> Self {
+///         Self(id)
+///     }
+///     fn node_id(&self) -> Id {
+///         self.0
+///     }
+/// }
+/// 
+/// #[derive(PartialEq, Clone, Debug)]
+/// struct EdgeExample { vertices: (Id, Id) }
+/// impl DirEdge for EdgeExample {
+///     fn bare(start: Id, end: Id) -> Self {
+///         Self { vertices: (start, end) }
+///     }
+///     fn terminal_ids(&self) -> (Id, Id) {
+///         self.vertices
+///     }
+///     fn change_start(&mut self, new_start: Id) {
+///         self.vertices.0 = new_start;
+///     }
+///     fn change_end(&mut self, new_end: Id) {
+///         self.vertices.1 = new_end;
+///     }
+/// }
+/// 
+/// // Type annotations are required here
+/// let mut graph_example: DiGraph<NodeExample, EdgeExample> =
+///     DiGraph::from_terminal_pairs(vec![(0,1), (1,2), (0,3), (2,5), (3,5)]);
+/// 
+/// assert_eq!(graph_example.next_available_id(), 4);
+/// assert_eq!(graph_example.in_degree(5), Some(2));
+/// assert_eq!(graph_example.out_degree(0), Some(2));
+/// assert_eq!(graph_example.out_degree(4), None);  // It's available after all
+/// 
+/// let _good_result = graph_example.insert_edge_with_nodes(0,4);
+/// assert_eq!(graph_example.next_available_id(), 6);
+/// assert_eq!(graph_example.out_degree(0), Some(3));
+/// assert_eq!(graph_example.out_degree(4), Some(0));
+/// 
+/// let bad_result = graph_example.insert_edge_with_nodes(1,2);
+/// assert_eq!(bad_result, Err("Edge with these terminals already exists."));
+/// ```
 #[derive(PartialEq, Serialize, Deserialize)]
 pub struct DiGraph<N, E> {
     pub name: Option<String>,

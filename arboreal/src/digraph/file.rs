@@ -6,7 +6,7 @@ use std::path::Path;
 use serde::{Serialize, Deserialize};
 use ron::{ser::PrettyConfig, de::from_bytes as ron_reader, Options as ron_writer, Result as RonResult};
 
-use super::{Nodal, DirEdge, DiGraph};
+// use super::{Nodal, DirEdge, DiGraph};
 
 pub trait FileIO: Default + Serialize + for<'a> Deserialize<'a>
 {
@@ -38,10 +38,10 @@ pub trait FileIO: Default + Serialize + for<'a> Deserialize<'a>
     }
 }
 
-impl<N: Nodal, E: DirEdge> FileIO for DiGraph<N, E> {
-    // Default implementations for
-    //  - config()
-    //  - load_or_default()
-    //  - load_from_file()
-    //  - save_to_file()
-}
+// impl<N: Nodal, E: DirEdge> FileIO for DiGraph<N, E> {
+//     // Default implementations for
+//     //  - config()
+//     //  - load_or_default()
+//     //  - load_from_file()
+//     //  - save_to_file()
+// }
