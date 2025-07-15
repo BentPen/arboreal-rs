@@ -52,6 +52,15 @@ impl<N: Nodal, E: DirEdge> DiGraph<N, E> {
         node_ids
     }
 
+    pub fn next_available_id(&self) -> Id {
+        for query_id in 0..self.nodes.len() as Id {
+            if !self.nodes.contains_key(&query_id) {
+                return query_id;
+            }
+        }
+        self.nodes.len() as Id
+    }
+
     pub fn all_edge_pairs(&self) -> Vec<(Id, Id)> {
         let mut edge_pairs = Vec::with_capacity(self.edges.len());
         for edge in self.edges.iter() {
@@ -86,6 +95,9 @@ impl<N: Nodal, E: DirEdge> DiGraph<N, E> {
     /// 
     /// If the node's id is already in use, an error is returned.
     pub fn insert_node(&mut self, node: N) -> Result<(), &'static str> {
+        if self.nodes.len() == ID_MAX.into() {
+            return Err("Graph is at max capacity.");
+        }
         let change = 
             graph_ref::check_add_node::<N, E>(&self.nodes, node);
         let new_node = change.try_get_node()?;

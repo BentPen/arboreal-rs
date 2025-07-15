@@ -1,15 +1,48 @@
 
 use serde::{de::DeserializeOwned, Serialize};
 
+/// Type of identifier for [Nodal] types.
+/// 
+/// At this point no use case is anticipated needing more than
+/// 2^16 = 65536 nodes--but a use case requiring more than
+/// 2^8 = 256 is certainly within reason. So this alias is
+/// expected to remain for the forseeable future.
+/// 
+/// In the future this may be redesigned to be a generic.
 pub type Id = u16;
+pub(crate) const ID_MAX: Id = std::u16::MAX;
 
+/// Trait required for any type used as nodes in a [`DiGraph`](crate::DiGraph) instance.
+/// 
+/// The user is required to define two methods for this trait:
+/// - `Self::bare(id: u16) -> Self` should create a "default" instance of the type, with the provided `id`.
+/// - `self.node_id() -> u16` should return a copy of the `id` associated with the instance.
+/// 
+/// It is incumbent on the library user to ensure the identifier is consistent between these methods.
 pub trait Nodal: Clone + PartialEq + Serialize + DeserializeOwned + Default {
     fn bare(id: Id) -> Self;
     fn node_id(&self) -> Id;
 }
 
+/// Trait required for any type used as edges in a [`DiGraph`](crate::DiGraph) instance.
+/// 
+/// The user is required to define four methods for this trait:
+/// - `Self::bare(start: u16, end: u16) -> Self` should create a "default" instance of the type, with the provided `start` and `end` terminal identifiers.
+/// - `self.terminal_ids() -> (u16, u16)` should return a copy of the `start` and `end` terminal identifiers associated with the instance.
+/// - `self.change_start(new_start: u16)` should replace the `start` terminal identifier with `new_start`.
+/// - `self.change_end(new_end: u16)` should replace the `end` terminal identifier with `new_end`.
+/// 
+/// It is incumbent on the library user to have the start and end identifiers be consistent across these methods.
+/// 
+/// ## Relation to [`Nodal`](crate::Nodal)
+/// An edge (an instance of a type implementing `DirEdge`) can exist without its terminal identifiers pointing to `id` values of two nodes (instances of a type
+/// implementing [`Nodal`](crate::Nodal)).\
+/// The requirement that those identifiers be shared with active nodes is only enforced when the program attempts to add the `DirEdge`
+/// type to a [`DiGraph`](crate::DiGraph) instance. If an edge is present in a `DiGraph`, then two nodes (one for each terminal identifier of the `DirEdge`) must also be present.
+/// The contrapositive is likewise enforced: whenever a node is removed from a `DiGraph`, then any edges incident on that node are then removed as well.
 pub trait DirEdge: Clone + PartialEq + Serialize + DeserializeOwned + Default {
 
+    /// Creates a new instance of the type, without any data besides
     fn bare(start: Id, end: Id) -> Self;
     fn terminal_ids(&self) -> (Id, Id);
 
@@ -26,7 +59,7 @@ pub trait DirEdge: Clone + PartialEq + Serialize + DeserializeOwned + Default {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub enum GraphChange<N, E> {
+pub(crate) enum GraphChange<N, E> {
     AddNode(N),
     RemoveNode(N, Vec<E>),
     AddEdge(E),

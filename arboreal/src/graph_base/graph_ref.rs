@@ -18,7 +18,7 @@ fn node_id_present<N: Nodal>(nodes: &NodeMap<N>, id: Id) -> bool {
     nodes.get(&id).is_some()
 }
 
-pub fn check_add_node<N: Nodal, E: DirEdge>(nodes: &NodeMap<N>, new_node: N) -> GraphChange<N, E> {
+pub(crate) fn check_add_node<N: Nodal, E: DirEdge>(nodes: &NodeMap<N>, new_node: N) -> GraphChange<N, E> {
     if node_id_present(nodes, new_node.node_id()) {
         return GraphChange::Failure("Node with this id already exists.");
     }
@@ -27,7 +27,7 @@ pub fn check_add_node<N: Nodal, E: DirEdge>(nodes: &NodeMap<N>, new_node: N) -> 
 
 /// Determines in- and out-degree of `id` in `edges`.
 /// If no edge is found with a terminal at this `id`, `(0, 0)` is returned.
-pub fn check_node_degrees<N: Nodal, E: DirEdge>(edges: &Vec<E>, id: Id) -> (usize, usize) {
+pub(crate) fn check_node_degrees<N: Nodal, E: DirEdge>(edges: &Vec<E>, id: Id) -> (usize, usize) {
     let mut degs = (0, 0);
     for edge in edges.iter() {
         if edge.start_id() == id {
@@ -40,7 +40,7 @@ pub fn check_node_degrees<N: Nodal, E: DirEdge>(edges: &Vec<E>, id: Id) -> (usiz
     degs
 }
 
-pub fn check_remove_node<N: Nodal, E: DirEdge>(nodes: &NodeMap<N>, edges: &Vec<E>, id: Id) -> GraphChange<N, E> {
+pub(crate) fn check_remove_node<N: Nodal, E: DirEdge>(nodes: &NodeMap<N>, edges: &Vec<E>, id: Id) -> GraphChange<N, E> {
     if !node_id_present(nodes, id) {
         return GraphChange::Failure("Node with this id not found.");
     }
@@ -57,7 +57,7 @@ pub fn check_remove_node<N: Nodal, E: DirEdge>(nodes: &NodeMap<N>, edges: &Vec<E
     GraphChange::RemoveNode(node_to_discard, edges_to_drop)
 }
 
-pub fn check_add_edge<N: Nodal, E: DirEdge>(nodes: &NodeMap<N>, edges: &Vec<E>, new_edge: E) -> GraphChange<N, E> {
+pub(crate) fn check_add_edge<N: Nodal, E: DirEdge>(nodes: &NodeMap<N>, edges: &Vec<E>, new_edge: E) -> GraphChange<N, E> {
     let (id_in, id_out) = new_edge.terminal_ids();
     if let Some(_index) = edge_index(edges, id_in, id_out) {
         return GraphChange::Failure("Edge with these terminals already exists.");
@@ -69,7 +69,7 @@ pub fn check_add_edge<N: Nodal, E: DirEdge>(nodes: &NodeMap<N>, edges: &Vec<E>, 
     GraphChange::Failure("Terminals not found in graph.")
 }
 
-pub fn check_add_edge_with_nodes<N: Nodal, E: DirEdge>(nodes: &NodeMap<N>, edges: &Vec<E>, id_in: Id, id_out: Id) -> GraphChange<N, E> {
+pub(crate) fn check_add_edge_with_nodes<N: Nodal, E: DirEdge>(nodes: &NodeMap<N>, edges: &Vec<E>, id_in: Id, id_out: Id) -> GraphChange<N, E> {
     if let Some(_index) = edge_index(edges, id_in, id_out) {
         return GraphChange::Failure("Edge with these terminals already exists.");
     }
@@ -85,7 +85,7 @@ pub fn check_add_edge_with_nodes<N: Nodal, E: DirEdge>(nodes: &NodeMap<N>, edges
     GraphChange::AddEdgeWith(proposed_edge, new_in, new_out)
 }
 
-pub fn check_remove_edge<N: Nodal, E: DirEdge>(edges: &Vec<E>, id_in: Id, id_out: Id) -> GraphChange<N, E> {
+pub(crate) fn check_remove_edge<N: Nodal, E: DirEdge>(edges: &Vec<E>, id_in: Id, id_out: Id) -> GraphChange<N, E> {
     if let Some(index) = edge_index(edges, id_in, id_out) {
         let edge_to_drop = edges[index].clone();
         return GraphChange::RemoveEdge(edge_to_drop);
@@ -93,7 +93,7 @@ pub fn check_remove_edge<N: Nodal, E: DirEdge>(edges: &Vec<E>, id_in: Id, id_out
     GraphChange::Failure("Edge not found in graph.")
 }
 
-pub fn collect_reachable_neighbors(census: &mut Vec<Id>, starting_point: Id, after_neighbor_map: &HashMap<Id, Vec<Id>>) {
+pub(crate) fn collect_reachable_neighbors(census: &mut Vec<Id>, starting_point: Id, after_neighbor_map: &HashMap<Id, Vec<Id>>) {
         if census.contains(&starting_point) {
             return
         }

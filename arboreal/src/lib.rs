@@ -1,13 +1,14 @@
-pub mod graph_base;
-pub mod digraph;
+mod graph_base;
+mod digraph;
+
+pub use digraph::{DiGraph, FileIO};
+pub use graph_base::graph_components::{Nodal, DirEdge, Id};
 
 #[cfg(test)]
 mod tests {
     use serde::{Deserialize, Serialize};
 
-    use crate::{
-        digraph::{DiGraph, FileIO}, graph_base::graph_components::* 
-    };
+    use super::*;
 
     #[derive(PartialEq, Clone, Debug, Default, Serialize, Deserialize)]
     struct NodeExample {
